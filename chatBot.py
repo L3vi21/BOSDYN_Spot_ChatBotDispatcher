@@ -186,25 +186,30 @@ class OrbitMissionDispatcher:
             print(f"✗ Failed to fetch missions: {e}")
             return {}
         
-    def 
+    def mission_dispatcher(self, robot_nickname: str, mission_name: str) -> bool:
+        try:
+            
+            mission_name = mission_name.lower()
+            robot_nickname = robot_nickname.lower()
+            print(f"⧗ Dispatching mission '{mission_name}' to robot '{robot_nickname}'...")
+            
+            if mission_key not in self.available_missions:
+            print(f"✗ Mission '{mission_name}' not found in Orbit.")
+            print(f"\n📋 Available missions:")
+            for mission in self.available_missions.values():
+                print(f"   • {mission.name}")
+            return False
+            
+            mission = self.available_missions[mission_name]
+            
+            target_roobot = robot_nickname or mission.robot_nickname
+            
+            if not target_robot or target_robot not in self.available_robots:
+                
 
             
                     
 
-        self.sdk = None
-        self.robot = None
-        self.lease_client = None
-        self.lease_keepalive = None
-        self.estop_client = None
-        self.estop_keepalive = None
-        self.robot_state_client = None
-        
-        self.autowalk_client = None
-        self.graph_nav_client = None
-        self.mission_client = None
-    
-        self.is_connected = False
-        self.current_mission = None
     
     def connect(self):
         try:
@@ -366,12 +371,6 @@ class OrbitMissionDispatcher:
     
     def __exit__(self, exc_type, exc_val, exc_tb):
         self.shutdown()
-        
-class mission:
-        mission_name = None
-        mission_type = None
-        is_mission_running = False
-        mission_id = None
         
 class missionDispatcher:
     def __innit__(self, robot):

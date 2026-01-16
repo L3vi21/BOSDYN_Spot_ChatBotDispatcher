@@ -1,5 +1,10 @@
+re
+json
+time
+requests
+typing
+dataclasses
+datetime
 bosdyn-client
 bosdyn-mission
-bosdyn-choreography-client
 bosdyn-orbit
-requests   
