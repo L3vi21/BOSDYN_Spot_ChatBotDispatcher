@@ -46,24 +46,24 @@ class OrbitMissionDispatcher:
         try:
             print(f"🔐 Authenticating with Orbit at {self.orbit_hostname}...")
             
-        if SPOT_SDK_AVAILABLE:
-            self.orbit_client = OrbitClient(self.orbit_hostname, verify=self.orbit_verify_cert)
-            self.orbit_client.authenticate(username, password)
-            print("✓ Orbit authentication successful (SDK)!")
+            if SPOT_SDK_AVAILABLE:
+                self.orbit_client = OrbitClient(self.orbit_hostname, verify=self.orbit_verify_cert)
+                self.orbit_client.authenticate(username, password)
+                print("✓ Orbit authentication successful (SDK)!")
                 return True
             
-        else:
-            auth_url = f"{self.orbit_url}/api/v1/auth/token"
-            response = requests.post(auth_url, json={"username": username, "password": password}, verify=self.orbit_verify_cert)
-            
-            if response.status_code == 200:
-                self.access_token = response.json()["access_token"]
-                print("✓ Orbit authentication successful (REST)!")
-                return True
             else:
-                print(f"✗ Authentication failed: {response.status_code}")
-                print(f"   {response.text}")
-                return False
+                auth_url = f"{self.orbit_url}/api/v1/auth/token"
+                response = requests.post(auth_url, json={"username": username, "password": password}, verify=self.orbit_verify_cert)
+            
+                if response.status_code == 200:
+                    self.access_token = response.json()["access_token"]
+                    print("✓ Orbit authentication successful (REST)!")
+                    return True
+                else:
+                    print(f"✗ Authentication failed: {response.status_code}")
+                    print(f"   {response.text}")
+                    return False
         except Exception as e:
             print(f"✗ Unexpected error during authentication: {e}")
             return False
@@ -92,12 +92,14 @@ class OrbitMissionDispatcher:
             
             if self.orbit_client:
                 robots = self.orbit_client.get_robots()
-                self.available_robots[robot_nickname.lower()] = {
-                    'id': robot.robot_id, 
-                    'nickname': robot.nickname,
-                    'serial_number': robot.serial_number,
-                    'state': getattr(robot, 'status', 'unknown')}
-                
+                for robot in robots:
+                    self.available_robots[robot.nickname.lower()] = {
+                        'id': robot.robot_id, 
+                        'nickname': robot.nickname,
+                        'serial_number': robot.serial_number,
+                        'state': getattr(robot, 'status', 'unknown')
+                    }
+
                 print(f"  • {robot.nickname} (S/N: {robot.serial_number})")
                 
             else:
@@ -119,7 +121,7 @@ class OrbitMissionDispatcher:
                         }
                         print(f"  • {nickname}")
         
-        print(f"  ✓ Found {len(self.available_robots)} robot(s)")
+            print(f"  ✓ Found {len(self.available_robots)} robot(s)")
             return self.available_robots
         
         except Exception as e:
@@ -216,39 +218,39 @@ class OrbitMissionDispatcher:
                 print(f"   Mission ID: {mission.mission_id}")
                 
                 if self.orbit_client:
-                # Using Orbit SDK to dispatch
-                self.orbit_client.start_mission(
-                    mission_id=mission.mission_id,
-                    robot_nickname=target_robot
-                )
+                    # Using Orbit SDK to dispatch
+                    self.orbit_client.start_mission(
+                        mission_id=mission.mission_id,
+                        robot_nickname=target_robot
+                    )
                 else:
-                # Using REST API to dispatch
-                headers = {'Authorization': f'Bearer {self.access_token}'}
-                dispatch_url = f"{self.orbit_url}/api/v0/missions/{mission.mission_id}/dispatch"
+                    # Using REST API to dispatch
+                    headers = {'Authorization': f'Bearer {self.access_token}'}
+                    dispatch_url = f"{self.orbit_url}/api/v0/missions/{mission.mission_id}/dispatch"
                 
-                payload = {
+                    payload = {
                     'robot_nickname': target_robot
-                }
+                    }
                 
-                response = requests.post(
-                    dispatch_url,
-                    json=payload,
-                    headers=headers,
-                    verify=self.verify_cert
-                )
+                    response = requests.post(
+                        dispatch_url,
+                        json=payload,
+                        headers=headers,
+                        verify=self.verify_cert
+                        )
                 
-                if response.status_code not in [200, 201, 202]:
-                    print(f"✗ Dispatch failed: {response.status_code}")
-                    print(f"   {response.text}")
-                    return False
+                    if response.status_code not in [200, 201, 202]:
+                        print(f"✗ Dispatch failed: {response.status_code}")
+                        print(f"   {response.text}")
+                        return False
             
-            print(f"✓ Mission dispatched successfully!")
-            print(f"💡 Monitor progress in Orbit web interface")
-            return True
+                    print(f"✓ Mission dispatched successfully!")
+                    print(f"💡 Monitor progress in Orbit web interface")
+                    return True
             
-        except Exception as e:
-            print(f"✗ Failed to dispatch mission: {e}")
-            return False
+            except Exception as e:
+                print(f"✗ Failed to dispatch mission: {e}")
+                return False
     
     def get_mission_status(self, mission_id: str) -> Optional[str]:
         try:
@@ -292,7 +294,7 @@ class OrbitMissionDispatcher:
             print(f"✗ Error fetching mission status: {e}")
             return None
 
-    def start_up(self, auth_method: str, **auth_kwargs) -> bool:
+    def startup(self, auth_method: str, **auth_kwargs) -> bool:
         if auth_method == 'password':
             if not self.authenticate_orbit(auth_kwargs.get('username'), auth_kwargs.get('password')):
                 return False
@@ -307,7 +309,7 @@ class OrbitMissionDispatcher:
         self.get_available_missions()
         return True
     
-class missionChatBot:
+class MissionChatBot:
     def __init__(self, dispatcher: OrbitMissionDispatcher):
         self.dispatcher = dispatcher
         
@@ -406,7 +408,7 @@ if __name__ == "__main__":
     import sys
     
     print("╔════════════════════════════════════════════════════════════╗")
-    print("║         Orbit Mission Dispatcher - Chatbot Interface      ║")
+    print("║         Orbit Mission Dispatcher - Chatbot Interface       ║")
     print("╚════════════════════════════════════════════════════════════╝\n")
     
     # Configuration
