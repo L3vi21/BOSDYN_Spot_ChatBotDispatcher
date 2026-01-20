@@ -5,3 +5,4 @@ datetime
 bosdyn-client
 bosdyn-mission
 bosdyn-orbit
+spot-sdk
