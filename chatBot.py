@@ -7,18 +7,62 @@ from dataclasses import dataclass
 from datetime import datetime
 
 try:
-    import bosdyn.client
     from bosdyn.client import create_standard_sdk, ResponseError, RpcError
     from bosdyn.client.lease import LeaseClient, LeaseKeepAlive
     from bosdyn.client.estop import EstopClient, EstopEndpoint, EstopKeepAlive
     from bosdyn.client.robot_state import RobotStateClient
-    from bosdyn import Client as OrbitClient
+    from bosdyn.api.mission import Client as OrbitClient
 
     SPOT_SDK_AVAILABLE = True
     print("✓ Spot SDK loaded successfully")
 except ImportError as e:
     SPOT_SDK_AVAILABLE = False
     print(f"✗ SDK import failed: {e}")
+
+print("=" * 60)
+print("DIAGNOSTIC: Checking bosdyn.orbit module")
+try:
+    import bosdyn.orbit
+    print(f"✓ bosdyn.orbit imported")
+    print(f"Available in bosdyn.orbit: {dir(bosdyn.orbit)}")
+    
+    # Check for Client
+    if hasattr(bosdyn.orbit, 'Client'):
+        print("✓ bosdyn.orbit.Client exists")
+    else:
+        print("✗ bosdyn.orbit.Client does NOT exist")
+    
+    # Check for client submodule
+    if hasattr(bosdyn.orbit, 'client'):
+        print("✓ bosdyn.orbit.client submodule exists")
+        import bosdyn.orbit.client as orbit_client_module
+        print(f"Available in bosdyn.orbit.client: {dir(orbit_client_module)}")
+    
+except ImportError as e:
+    print(f"✗ Cannot import bosdyn.orbit: {e}")
+print("=" * 60)
+print("=" * 60)
+print("DIAGNOSTIC: Checking bosdyn.orbit module")
+try:
+    import bosdyn.orbit
+    print(f"✓ bosdyn.orbit imported")
+    print(f"Available in bosdyn.orbit: {dir(bosdyn.orbit)}")
+    
+    # Check for Client
+    if hasattr(bosdyn.orbit, 'Client'):
+        print("✓ bosdyn.orbit.Client exists")
+    else:
+        print("✗ bosdyn.orbit.Client does NOT exist")
+    
+    # Check for client submodule
+    if hasattr(bosdyn.orbit, 'client'):
+        print("✓ bosdyn.orbit.client submodule exists")
+        import bosdyn.orbit.client as orbit_client_module
+        print(f"Available in bosdyn.orbit.client: {dir(orbit_client_module)}")
+    
+except ImportError as e:
+    print(f"✗ Cannot import bosdyn.orbit: {e}")
+print("=" * 60)
 
 @dataclass
 class Mission:
@@ -134,6 +178,8 @@ class OrbitMissionDispatcher:
 
             if self.orbit_client:
                 missions = self.orbit_client.get_site_walks()
+                # print(f"DEBUG: get_site_walks() returned: {missions}")
+                # print(f"DEBUG: Type: {type(missions)}")
                 self.available_missions = {}
                 for mission in missions:
                     mission_obj = Mission(
@@ -150,7 +196,7 @@ class OrbitMissionDispatcher:
             else:       
                 headers = {'Authorization': f'Bearer {self.access_token}'}
                 response = requests.get(
-                    f"{self.orbit_url}/missions", 
+                    f"{self.orbit_url}/api/v0/site_walks", 
                     headers=headers, 
                     verify=self.orbit_verify_cert,
                     timeout=10
@@ -158,14 +204,15 @@ class OrbitMissionDispatcher:
                 
                 if response.status_code == 200:
                     data = response.json()
-                    print(f"DEBUG: API Response type: {type(data)}")
-                    print(f"DEBUG: API Response: {data}")
+                    # print(f"DEBUG: API Response type: {type(data)}")
+                    # print(f"DEBUG: API Response: {data}")
 
                     missions = data if isinstance(data, list) else data.get('missions', [])
                     self.available_missions = {}
                     for mission in missions:  # ← Fixed indentation
+                        # print(f"DEBUG: Processing mission: {mission}")
                         mission_obj = Mission(  # ← Fixed indentation
-                            mission_id=mission['id'],
+                            mission_id=mission['uuid'],
                             mission_name=mission['name'],
                             robot_nickname=mission.get('robot_nickname'),
                             created_at=mission.get('created_at'),
@@ -204,7 +251,7 @@ class OrbitMissionDispatcher:
                 print(f"✗ Mission '{mission_name}' not found in Orbit.")
                 print(f"\n📋 Available missions:")
                 for mission in self.available_missions.values():
-                    print(f"   • {mission.name}")
+                    print(f"   • {mission}")
                 return False
 
             mission = self.available_missions[mission_key]
@@ -375,7 +422,7 @@ class MissionChatBot:
             print(f"\n📋 Available Missions ({len(missions)}):")
             for mission in missions.values():
                 robot_info = f" → {mission.robot_nickname}" if mission.robot_nickname else ""
-                print(f"   • {mission.name}{robot_info}")
+                print(f"   • {mission.mission_name}{robot_info}")
         else:
             print("\n📋 No missions in Orbit")
         print()

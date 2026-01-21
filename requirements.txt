@@ -2,6 +2,7 @@ requests
 typing
 dataclasses
 datetime
+bosdyn-api
 bosdyn-client
 bosdyn-mission
 bosdyn-orbit
