@@ -2,67 +2,16 @@ import re
 import json
 import time
 import requests
+import sys
 from typing import Optional, Dict, List
 from dataclasses import dataclass
 from datetime import datetime
-
 try:
-    from bosdyn.client import create_standard_sdk, ResponseError, RpcError
-    from bosdyn.client.lease import LeaseClient, LeaseKeepAlive
-    from bosdyn.client.estop import EstopClient, EstopEndpoint, EstopKeepAlive
-    from bosdyn.client.robot_state import RobotStateClient
-    from bosdyn.api.mission import Client as OrbitClient
-
+    from bosdyn.orbit.client import Client as OrbitClient
     SPOT_SDK_AVAILABLE = True
-    print("✓ Spot SDK loaded successfully")
-except ImportError as e:
+except ImportError:
+    print("⚠️  Orbit SDK not found. Install via: pip install bosdyn-orbit")
     SPOT_SDK_AVAILABLE = False
-    print(f"✗ SDK import failed: {e}")
-
-print("=" * 60)
-print("DIAGNOSTIC: Checking bosdyn.orbit module")
-try:
-    import bosdyn.orbit
-    print(f"✓ bosdyn.orbit imported")
-    print(f"Available in bosdyn.orbit: {dir(bosdyn.orbit)}")
-    
-    # Check for Client
-    if hasattr(bosdyn.orbit, 'Client'):
-        print("✓ bosdyn.orbit.Client exists")
-    else:
-        print("✗ bosdyn.orbit.Client does NOT exist")
-    
-    # Check for client submodule
-    if hasattr(bosdyn.orbit, 'client'):
-        print("✓ bosdyn.orbit.client submodule exists")
-        import bosdyn.orbit.client as orbit_client_module
-        print(f"Available in bosdyn.orbit.client: {dir(orbit_client_module)}")
-    
-except ImportError as e:
-    print(f"✗ Cannot import bosdyn.orbit: {e}")
-print("=" * 60)
-print("=" * 60)
-print("DIAGNOSTIC: Checking bosdyn.orbit module")
-try:
-    import bosdyn.orbit
-    print(f"✓ bosdyn.orbit imported")
-    print(f"Available in bosdyn.orbit: {dir(bosdyn.orbit)}")
-    
-    # Check for Client
-    if hasattr(bosdyn.orbit, 'Client'):
-        print("✓ bosdyn.orbit.Client exists")
-    else:
-        print("✗ bosdyn.orbit.Client does NOT exist")
-    
-    # Check for client submodule
-    if hasattr(bosdyn.orbit, 'client'):
-        print("✓ bosdyn.orbit.client submodule exists")
-        import bosdyn.orbit.client as orbit_client_module
-        print(f"Available in bosdyn.orbit.client: {dir(orbit_client_module)}")
-    
-except ImportError as e:
-    print(f"✗ Cannot import bosdyn.orbit: {e}")
-print("=" * 60)
 
 @dataclass
 class Mission:
@@ -115,16 +64,36 @@ class OrbitMissionDispatcher:
             print(f"✗ Unexpected error during authentication: {e}")
             return False
         
-    def authenticate_orbit_with_api_token(self, api_token: str) -> bool:
+    def authenticate_orbit_with_api_token(self, api_token: str):
         try:
             print(f"🔐 Authenticating with Orbit using API token...")
+
+            self.access_token = api_token
             
             if SPOT_SDK_AVAILABLE:
-                self.orbit_client = OrbitClient(hostname=self.orbit_hostname, verify=self.orbit_verify_cert, token = api_token)
-                print("✓ Orbit authentication successful!")
-                return True
+                temp_client = OrbitClient(
+                    hostname=self.orbit_hostname,
+                    verify=self.orbit_verify_cert,
+                    )
+
+                temp_client.token = api_token
+                temp_client._session.headers.update(
+                    {'Authorization': f'Bearer {api_token}'}
+                )
+                try:
+                    print("   Verifying SDK connection...")
+                    # get_system_time is usually a fast, safe check
+                    temp_client.get_system_time() 
+                    print("✓ SDK Validation Passed!")
+                    self.orbit_client = temp_client
+                    return True
+                except Exception as e:
+                    print(f"⚠️ SDK Validation Failed: {e}")
+                    print("   (The SDK refused the token, so we will disable the SDK client)")
+                    # Kill the client so 'if self.orbit_client' returns False later
+                    self.orbit_client = None
+                    return True # We still return True because REST mode works
             else:
-                self.access_token = api_token
                 print("✓ API token set!")
                 return True
                 
@@ -156,6 +125,12 @@ class OrbitMissionDispatcher:
                         continue
 
                     nickname = robot['nickname']
+
+                    s_online = "🟢 ONLINE" if robot.get('isOnline') else "🔴 OFFLINE"
+                    lease = "Unknown"
+                    if 'lease' in robot:
+                        print(lease = robot['lease'].get('holder', 'None'))
+
                     self.available_robots[nickname.lower()] = {
                         'id': robot.get('hostname', robot.get('robotIndex', 'N/A')),
                         'nickname': nickname,
@@ -173,26 +148,32 @@ class OrbitMissionDispatcher:
             return {}      
         
     def get_available_missions(self) -> Dict[str, Mission]:
+        self.available_missions = {}
         try:
             print("⧗ Fetching available missions from Orbit...")
 
             if self.orbit_client:
                 missions = self.orbit_client.get_site_walks()
+
                 # print(f"DEBUG: get_site_walks() returned: {missions}")
                 # print(f"DEBUG: Type: {type(missions)}")
-                self.available_missions = {}
+
                 for mission in missions:
+
+                    raw_name = mission.get('name')
+                    m_name = raw_name if raw_name else "Unnamed Mission"
+
                     mission_obj = Mission(
                         mission_id=mission.id,
-                        mission_name=mission.name,
+                        mission_name=m_name,
                         robot_nickname=mission.robot_nickname,
                         created_at=mission.created_at,
                         mission_type=mission.mission_type
                     )
                         
-                    self.available_missions[mission.name.lower()] = mission_obj
+                    self.available_missions[m_name.lower()] = mission_obj
                     robot_info = f" (Robot: {mission_obj.robot_nickname})" if mission_obj.robot_nickname else ""
-                    print(f"  • {mission.name}{robot_info}")
+                    print(f"  • {m_name}{robot_info}")
             else:       
                 headers = {'Authorization': f'Bearer {self.access_token}'}
                 response = requests.get(
@@ -209,20 +190,24 @@ class OrbitMissionDispatcher:
 
                     missions = data if isinstance(data, list) else data.get('missions', [])
                     self.available_missions = {}
-                    for mission in missions:  # ← Fixed indentation
+                    for mission in missions:
+
+                        raw_name = mission.get('name')
+                        m_name = raw_name if raw_name else "Unnamed Mission"
+
                         # print(f"DEBUG: Processing mission: {mission}")
                         mission_obj = Mission(  # ← Fixed indentation
                             mission_id=mission['uuid'],
-                            mission_name=mission['name'],
+                            mission_name=m_name,
                             robot_nickname=mission.get('robot_nickname'),
                             created_at=mission.get('created_at'),
                             mission_type=mission.get('mission_type', None)
                         )
-                        
-                        self.available_missions[mission['name'].lower()] = mission_obj
+
+                        self.available_missions[m_name.lower()] = mission_obj
                         robot_info = f" (Robot: {mission_obj.robot_nickname})" if mission_obj.robot_nickname else ""
-                        print(f"  • {mission['name']}{robot_info}")
-            
+                        print(f"  • {m_name}{robot_info}")
+
             if not self.available_missions:
                 print("  ⚠️  No missions found in Orbit!")
                 print("  💡 Create missions in Orbit:")
@@ -255,7 +240,6 @@ class OrbitMissionDispatcher:
                 return False
 
             mission = self.available_missions[mission_key]
-
             target_robot = robot_nickname or mission.robot_nickname
             
             if not target_robot or target_robot not in self.available_robots:
@@ -264,42 +248,53 @@ class OrbitMissionDispatcher:
                 for robot in self.available_robots.values():
                     print(f"   • {robot.nickname}")
                 return False
-
-            try:
-                print(f"🚀 Dispatching mission: {mission.name}")
-                print(f"   Target robot: {target_robot}")
-                print(f"   Mission ID: {mission.mission_id}")
-                
-                if self.orbit_client:
-                    # Using Orbit SDK to dispatch
-                    self.orbit_client.start_mission(
-                        mission_id=mission.mission_id,
-                        robot_nickname=target_robot
-                    )
-                else:
-                    # Using REST API to dispatch
-                    headers = {'Authorization': f'Bearer {self.access_token}'}
-                    dispatch_url = f"{self.orbit_url}/api/v0/missions/{mission.mission_id}/dispatch"
-                
-                    payload = {
-                    'robot_nickname': target_robot
-                    }
-                
-                    response = requests.post(
-                        dispatch_url,
-                        json=payload,
-                        headers=headers,
-                        verify=self.orbit_verify_cert
-                        )
-                
-                    if response.status_code not in [200, 201, 202]:
-                        print(f"✗ Dispatch failed: {response.status_code}")
-                        print(f"   {response.text}")
-                        return False
             
-                    print(f"✓ Mission dispatched successfully!")
+            robot_hostname = self.available_robots[target_robot]['id']
+
+            # OPTION 1: DIPATCH USING THE SPOT SDK
+            if self.orbit_client:
+                try:
+                    print(f"🚀 Dispatching mission: {mission.mission_name}")
+                    print(f"   Target robot: {target_robot}")
+                    print(f"   Mission ID: {mission.mission_id}")
+
+                    current_time_ms = int(time.time() * 1000)
+
+                    self.orbit_client.post_schedule(
+                        mission_id=mission.mission_id,
+                        robot_id=target_robot,
+                        start_time=current_time_ms,
+                        request_name=f"Run-{mission.mission_name}-{current_time_ms}"
+                        )
+                    print(f"✓ Mission scheduled for immediate execution via SDK!")
                     print(f"💡 Monitor progress in Orbit web interface")
                     return True
+                except:
+                    print("⚠️  SDK dispatch failed, attempting REST API dispatch...")
+
+            try:
+                # Using REST API to dispatch
+                headers = {'Authorization': f'Bearer {self.access_token}'}
+                dispatch_url = f"{self.orbit_url}/api/v0/site_walks"
+                payload = {
+                    "robot_hostname": robot_hostname
+                    }
+                
+                response = requests.post(
+                    dispatch_url,
+                    json=payload,
+                    headers=headers,
+                    verify=self.orbit_verify_cert
+                    )
+                
+                if response.status_code not in [200, 201, 202]:
+                    print(f"✗ Dispatch failed: {response.status_code}")
+                    print(f"   {response.text}")
+                    return False
+            
+                print(f"✓ Mission dispatched successfully!")
+                print(f"💡 Monitor progress in Orbit web interface")
+                return True
             
             except Exception as e:
                 print(f"✗ Failed to dispatch mission: {e}")
@@ -323,7 +318,7 @@ class OrbitMissionDispatcher:
             else:
                 headers = {"Authorization": f'Bearer {self.access_token}'}
                 response = requests.get(
-                    f"{self.orbit_url}/api/v0/missions/{mission.mission_id}/runs",
+                    f"{self.orbit_url}/api/v0/site_walks/{mission.mission_id}/runs",
                     headers=headers,
                     verify=self.orbit_verify_cert
                 )
