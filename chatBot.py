@@ -7,6 +7,8 @@ from typing import Optional, Dict, List, Any
 from dataclasses import dataclass
 from datetime import datetime
 
+ORBIT_HOSTNAME = "10.129.31.6"
+
 # --- SDK Import Handling ---
 try:
     import bosdyn.client
@@ -415,9 +417,6 @@ if __name__ == "__main__":
     print("╔════════════════════════════════════════════════════════════╗")
     print("║         Orbit Mission Dispatcher - Chatbot Interface       ║")
     print("╚════════════════════════════════════════════════════════════╝\n")
-    
-    # Configuration
-    ORBIT_HOSTNAME = "orbit.example.com" 
     
     try:
         # Get Credentials
