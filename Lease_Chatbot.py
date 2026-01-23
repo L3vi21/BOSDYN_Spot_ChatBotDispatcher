@@ -1,6 +1,7 @@
 import re
 import json
 import time
+import uuid
 import requests
 import sys
 from typing import Optional, Dict, List
@@ -42,6 +43,35 @@ class OrbitMissionDispatcher:
         
         self.available_missions = {}
         self.available_robots = {}
+
+    def probe_robot(self, robot_ip: str, robot_name: str):
+        print(f"\n🔍 DIAGNOSTIC: Probing {robot_name} at {robot_ip}...")
+ 
+        try:
+            response = requests.get(f"https://{robot_ip}/", verify=False, timeout=3)
+            
+            if response.status_code == 200:
+                print(f"   ✅ PC ➔ ROBOT: SUCCESS! Robot web server is active.")
+                print(f"      (This proves your network connection is good)")
+            else:
+                print(f"   ⚠️ PC ➔ ROBOT: Connected, but got code {response.status_code}")
+                
+        except requests.exceptions.ConnectTimeout:
+            print(f"   ❌ PC ➔ ROBOT: FAILED (Timed Out)")
+            print(f"      -> Your computer cannot see {robot_ip}. Check your WiFi!")
+            return
+        except Exception as e:
+            print(f"   ❌ PC ➔ ROBOT: FAILED ({e})")
+            return
+        
+        robot_data = self.available_robots.get(robot_name.lower())
+        if robot_data:
+            orbit_sees_it = robot_data.get('status')
+            if "ONLINE" in orbit_sees_it:
+                print(f"   ✅ ORBIT ➔ ROBOT: SUCCESS! Orbit is connected.")
+            else:
+                print(f"   ❌ ORBIT ➔ ROBOT: FAILED! Orbit says '{orbit_sees_it}'")
+                print(f"      -> FIX: Go to Orbit Settings > Robots > Edit > Re-enter Password")
         
     def authenticate(self, username: str, password: str) -> bool:
         try:
@@ -161,20 +191,25 @@ class OrbitMissionDispatcher:
                         continue
 
                     nickname = robot['nickname']
-
-                    s_online = "🟢 ONLINE" if robot.get('isOnline') else "🔴 OFFLINE"
+                    ip_address = robot.get('wifiIpAddress', 'N/A')
                     lease = "Unknown"
                     if 'lease' in robot:
-                        print(lease = robot['lease'].get('holder', 'None'))
+                        lease = robot['lease'].get('holder', 'None')
 
                     self.available_robots[nickname.lower()] = {
                         'id': robot.get('hostname', robot.get('robotIndex', 'N/A')),
                         'nickname': nickname,
                         'serial_number': robot.get('hostname', 'N/A'),
                         'status': 'paired' if robot.get('paired', False) else 'unpaired',
-                        'ip' : robot.get('ipEthernet', 'N/A')
+                        'ip' : ip_address
                         }
                     print(f"  • {nickname} ({robot.get('ipEthernet', 'N/A')})")
+                    print(f"  • {nickname} ({ip_address}) | Lease: {lease}")
+                
+                    # --- NEW: Run the Probe ---
+                    if ip_address and ip_address != 'N/A':
+                        self.probe_robot(ip_address, nickname)
+                    
         
             print(f"  ✓ Found {len(self.available_robots)} robot(s)")
             return self.available_robots
@@ -190,9 +225,6 @@ class OrbitMissionDispatcher:
 
             if self.orbit_client:
                 missions = self.orbit_client.get_site_walks()
-
-                # print(f"DEBUG: get_site_walks() returned: {missions}")
-                # print(f"DEBUG: Type: {type(missions)}")
 
                 for mission in missions:
 
@@ -281,39 +313,22 @@ class OrbitMissionDispatcher:
             if not target_robot or target_robot not in self.available_robots:
                 print(f"✗ Robot '{target_robot}' not found in Orbit.")
                 print(f"\nAvailable robots:")
-                for robot in self.available_robots.values():
-                    print(f"   • {robot.nickname}")
-                return False
-            
+
             robot_hostname = self.available_robots[target_robot]['id']
 
-            # OPTION 1: DIPATCH USING THE SPOT SDK
-            if self.orbit_client:
-                try:
-                    print(f"🚀 Dispatching mission: {mission.mission_name}")
-                    print(f"   Target robot: {target_robot}")
-                    print(f"   Mission ID: {mission.mission_id}")
-
-                    current_time_ms = int(time.time() * 1000)
-
-                    self.orbit_client.post_schedule(
-                        mission_id=mission.mission_id,
-                        robot_id=target_robot,
-                        start_time=current_time_ms,
-                        request_name=f"Run-{mission.mission_name}-{current_time_ms}"
-                        )
-                    print(f"✓ Mission scheduled for immediate execution via SDK!")
-                    print(f"💡 Monitor progress in Orbit web interface")
-                    return True
-                except:
-                    print("⚠️  SDK dispatch failed, attempting REST API dispatch...")
+            unique_request_id = str(uuid.uuid4())
+            current_time_ms = int(time.time() * 1000)
+            request_name = f"Run-{mission.mission_name}-{current_time_ms}-{unique_request_id}"
 
             try:
                 # Using REST API to dispatch
                 headers = {'Authorization': f'Bearer {self.access_token}'}
                 dispatch_url = f"{self.orbit_url}/api/v0/site_walks"
                 payload = {
-                    "robot_hostname": robot_hostname
+                    "site_walk_uuid": mission.mission_id,
+                    "robot_hostname": robot_hostname,
+                    "start_time" : current_time_ms,
+                    "request_name": request_name
                     }
                 
                 response = requests.post(

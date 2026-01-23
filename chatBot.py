@@ -126,20 +126,25 @@ class OrbitMissionDispatcher:
 
                     nickname = robot['nickname']
 
-                    s_online = "🟢 ONLINE" if robot.get('isOnline') else "🔴 OFFLINE"
-                    lease = "Unknown"
-                    if 'lease' in robot:
-                        print(lease = robot['lease'].get('holder', 'None'))
+                    # Check Online Status
+                    is_online = robot.get('isOnline') or (robot.get('status') == 'ONLINE')
+                    status_str = "🟢 ONLINE" if is_online else "🔴 OFFLINE"
+                    
+                    # Check Lease Holder
+                    # The API usually returns 'lease': {'holder': '...'} or similar
+                    lease_info = robot.get('lease', {})
+                    lease_holder = lease_info.get('holder') or lease_info.get('resource') or "None/Unknown"
 
                     self.available_robots[nickname.lower()] = {
                         'id': robot.get('hostname', robot.get('robotIndex', 'N/A')),
                         'nickname': nickname,
                         'serial_number': robot.get('hostname', 'N/A'),
                         'status': 'paired' if robot.get('paired', False) else 'unpaired',
+                        'lease_holder': lease_holder,
                         'ip' : robot.get('ipEthernet', 'N/A')
                         }
-                    print(f"  • {nickname} ({robot.get('ipEthernet', 'N/A')})")
-        
+                    print(f"  • {nickname} ({robot.get('ipEthernet', 'N/A')} )")
+
             print(f"  ✓ Found {len(self.available_robots)} robot(s)")
             return self.available_robots
         
