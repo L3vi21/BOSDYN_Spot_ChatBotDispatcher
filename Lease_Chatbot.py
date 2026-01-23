@@ -320,16 +320,43 @@ class OrbitMissionDispatcher:
             current_time_ms = int(time.time() * 1000)
             request_name = f"Run-{mission.mission_name}-{current_time_ms}-{unique_request_id}"
 
+            driver_id = unique_request_id
+            dispatch_url = f"{self.orbit_url}/api/v0/calendar/mission/dispatch/{target_robot}?currentDriverId={driver_id}"
+
+            payload = {
+                "agent": {
+                    "nickname": target_robot,
+                },
+                "schedule" : {
+                    "timeMs" : {
+                        "low" : 1,
+                        "high" : 0,
+                        "unsigned" : False
+                    },
+                    "repeatMs" : {
+                        "low" : 0,
+                        "high" : 0,
+                        "unsigned" : False
+                    } 
+                },
+                "task" : {
+                    "dispatchTarget" : {
+                        "missionId" : mission.mission_id
+                    },
+                    "forceAcquireEstop" : True,
+                    "forceAcquireLease" : True,
+                    "skipInitialization": True,
+                },
+                "eventMetadata": {
+                    "name": f"Manual Dispatch ({driver_id})"
+                }
+            }
+            
+            print(f" ⧗ Sending Calendar Dispatch to: {dispatch_url}")
+
             try:
                 # Using REST API to dispatch
                 headers = {'Authorization': f'Bearer {self.access_token}'}
-                dispatch_url = f"{self.orbit_url}/api/v0/site_walks"
-                payload = {
-                    "site_walk_uuid": mission.mission_id,
-                    "robot_hostname": robot_hostname,
-                    "start_time" : current_time_ms,
-                    "request_name": request_name
-                    }
                 
                 response = requests.post(
                     dispatch_url,
