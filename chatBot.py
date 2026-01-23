@@ -267,9 +267,9 @@ class OrbitMissionDispatcher:
             print(f"✓ Mission dispatched successfully!")
             return True
             
-            except Exception as e:
-                print(f"✗ Failed to dispatch mission: {e}")
-                return False
+        except Exception as e:
+            print(f"✗ Failed to dispatch mission: {e}")
+            return False
     
     def get_mission_status(self, mission_name: str) -> Optional[Dict]:
         try:
