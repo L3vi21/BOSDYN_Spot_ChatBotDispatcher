@@ -7,3 +7,5 @@ bosdyn-client
 bosdyn-mission
 bosdyn-orbit
 spot-sdk
+opencv-python
+logging

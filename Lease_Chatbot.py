@@ -7,6 +7,10 @@ import sys
 from typing import Optional, Dict, List
 from dataclasses import dataclass
 from datetime import datetime
+import cv2
+import logging
+import numpy as np
+
 try:
     from bosdyn.orbit.client import Client as OrbitClient
     SPOT_SDK_AVAILABLE = True
@@ -345,7 +349,8 @@ class OrbitMissionDispatcher:
                     },
                     "forceAcquireEstop" : True,
                     "forceAcquireLease" : True,
-                    "skipInitialization": True,
+                    "skipInitialization": False,
+                    "requireDocked": False
                 },
                 "eventMetadata": {
                     "name": f"Manual Dispatch ({driver_id})"
